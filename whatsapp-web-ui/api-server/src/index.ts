@@ -24,11 +24,32 @@ const anthropic = new Anthropic({
 app.use(cors());
 app.use(express.json());
 
+// Mock data for testing
+const mockChats = [
+  { id: '1', name: 'Family Group', lastMessage: 'See you tomorrow!', timestamp: Date.now() - 3600000 },
+  { id: '2', name: 'Work Team', lastMessage: 'Meeting at 2 PM', timestamp: Date.now() - 7200000 },
+  { id: '3', name: 'Friends', lastMessage: 'Party tonight?', timestamp: Date.now() - 86400000 },
+];
+
+const mockMessages: Record<string, any[]> = {
+  '1': [
+    { id: '1', content: 'Hi everyone!', timestamp: Date.now() - 3600000, sender: 'user' },
+    { id: '2', content: 'Hello!', timestamp: Date.now() - 3500000, sender: 'bot' },
+  ],
+  '2': [
+    { id: '3', content: 'Project update?', timestamp: Date.now() - 7200000, sender: 'user' },
+    { id: '4', content: 'Everything is on track', timestamp: Date.now() - 7100000, sender: 'bot' },
+  ],
+  '3': [
+    { id: '5', content: 'Anyone up for dinner?', timestamp: Date.now() - 86400000, sender: 'user' },
+    { id: '6', content: 'Count me in!', timestamp: Date.now() - 86300000, sender: 'bot' },
+  ],
+};
+
 // Routes
 app.get('/api/chats', async (req, res) => {
   try {
-    // TODO: Implement chat list retrieval from WhatsApp MCP server
-    res.json([]);
+    res.json(mockChats);
   } catch (error) {
     console.error('Error fetching chats:', error);
     res.status(500).json({ error: 'Failed to fetch chats' });
@@ -37,8 +58,9 @@ app.get('/api/chats', async (req, res) => {
 
 app.get('/api/messages/:chatId', async (req, res) => {
   try {
-    // TODO: Implement message retrieval from WhatsApp MCP server
-    res.json([]);
+    const { chatId } = req.params;
+    const messages = mockMessages[chatId] || [];
+    res.json(messages);
   } catch (error) {
     console.error('Error fetching messages:', error);
     res.status(500).json({ error: 'Failed to fetch messages' });
@@ -47,9 +69,34 @@ app.get('/api/messages/:chatId', async (req, res) => {
 
 app.post('/api/messages/:chatId', async (req, res) => {
   try {
+    const { chatId } = req.params;
     const { message } = req.body;
-    // TODO: Implement message sending through WhatsApp MCP server
-    res.json({ success: true });
+
+    // Create a new message
+    const newMessage = {
+      id: Date.now().toString(),
+      content: message,
+      timestamp: Date.now(),
+      sender: 'user' as const
+    };
+
+    // Add to mock messages
+    if (!mockMessages[chatId]) {
+      mockMessages[chatId] = [];
+    }
+    mockMessages[chatId].push(newMessage);
+
+    // Update last message in chat
+    const chat = mockChats.find(c => c.id === chatId);
+    if (chat) {
+      chat.lastMessage = message;
+      chat.timestamp = Date.now();
+    }
+
+    // Emit the new message to connected clients
+    io.emit(`chat:${chatId}`, newMessage);
+
+    res.json(newMessage);
   } catch (error) {
     console.error('Error sending message:', error);
     res.status(500).json({ error: 'Failed to send message' });
@@ -66,7 +113,7 @@ io.on('connection', (socket) => {
 
   // Handle real-time message updates
   socket.on('subscribe_to_chat', (chatId: string) => {
-    // TODO: Implement chat subscription logic
+    socket.join(`chat:${chatId}`);
     console.log(`Client subscribed to chat: ${chatId}`);
   });
 });
