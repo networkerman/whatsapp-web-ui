@@ -11,10 +11,10 @@ import (
 )
 
 type Chat struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
 	LastMessage string `json:"lastMessage,omitempty"`
-	Timestamp int64  `json:"timestamp"`
+	Timestamp   int64  `json:"timestamp"`
 }
 
 type Message struct {
@@ -52,13 +52,33 @@ func main() {
 }
 
 func getChats(w http.ResponseWriter, r *http.Request) {
-	chats := []Chat{
-		{
-			ID:        "1",
-			Name:      "Test Chat",
-			LastMessage: "Hello!",
-			Timestamp: 1709123456,
-		},
+	mcpServerPath := os.Getenv("MCP_SERVER_PATH")
+	if mcpServerPath == "" {
+		log.Printf("MCP_SERVER_PATH not set")
+		http.Error(w, "MCP server path not configured", http.StatusInternalServerError)
+		return
+	}
+
+	// Call the MCP server to get chats
+	resp, err := http.Get(mcpServerPath + "/api/chats")
+	if err != nil {
+		log.Printf("Error fetching chats: %v", err)
+		http.Error(w, "Failed to fetch chats", http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("MCP server returned status: %d", resp.StatusCode)
+		http.Error(w, "Failed to fetch chats", http.StatusInternalServerError)
+		return
+	}
+
+	var chats []Chat
+	if err := json.NewDecoder(resp.Body).Decode(&chats); err != nil {
+		log.Printf("Error decoding chats: %v", err)
+		http.Error(w, "Failed to decode chats", http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -66,13 +86,36 @@ func getChats(w http.ResponseWriter, r *http.Request) {
 }
 
 func getMessages(w http.ResponseWriter, r *http.Request) {
-	messages := []Message{
-		{
-			ID:        "1",
-			Content:   "Hello!",
-			Timestamp: 1709123456,
-			Sender:    "user",
-		},
+	vars := mux.Vars(r)
+	chatID := vars["chatId"]
+
+	mcpServerPath := os.Getenv("MCP_SERVER_PATH")
+	if mcpServerPath == "" {
+		log.Printf("MCP_SERVER_PATH not set")
+		http.Error(w, "MCP server path not configured", http.StatusInternalServerError)
+		return
+	}
+
+	// Call the MCP server to get messages
+	resp, err := http.Get(mcpServerPath + "/api/messages/" + chatID)
+	if err != nil {
+		log.Printf("Error fetching messages: %v", err)
+		http.Error(w, "Failed to fetch messages", http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("MCP server returned status: %d", resp.StatusCode)
+		http.Error(w, "Failed to fetch messages", http.StatusInternalServerError)
+		return
+	}
+
+	var messages []Message
+	if err := json.NewDecoder(resp.Body).Decode(&messages); err != nil {
+		log.Printf("Error decoding messages: %v", err)
+		http.Error(w, "Failed to decode messages", http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -80,17 +123,46 @@ func getMessages(w http.ResponseWriter, r *http.Request) {
 }
 
 func sendMessage(w http.ResponseWriter, r *http.Request) {
-	var message Message
+	vars := mux.Vars(r)
+	chatID := vars["chatId"]
+
+	var message struct {
+		Content string `json:"message"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&message); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	// Echo back the message
-	message.ID = "2"
-	message.Sender = "bot"
-	message.Timestamp = 1709123457
+	mcpServerPath := os.Getenv("MCP_SERVER_PATH")
+	if mcpServerPath == "" {
+		log.Printf("MCP_SERVER_PATH not set")
+		http.Error(w, "MCP server path not configured", http.StatusInternalServerError)
+		return
+	}
+
+	// Call the MCP server to send message
+	resp, err := http.Post(mcpServerPath+"/api/messages/"+chatID, "application/json", nil)
+	if err != nil {
+		log.Printf("Error sending message: %v", err)
+		http.Error(w, "Failed to send message", http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("MCP server returned status: %d", resp.StatusCode)
+		http.Error(w, "Failed to send message", http.StatusInternalServerError)
+		return
+	}
+
+	var sentMessage Message
+	if err := json.NewDecoder(resp.Body).Decode(&sentMessage); err != nil {
+		log.Printf("Error decoding sent message: %v", err)
+		http.Error(w, "Failed to decode sent message", http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(message)
-} 
+	json.NewEncoder(w).Encode(sentMessage)
+}
