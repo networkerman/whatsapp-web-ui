@@ -1,137 +1,158 @@
-# WhatsApp MCP Server
+# WhatsApp MCP with Web UI
 
-This is a Model Context Protocol (MCP) server for WhatsApp.
+This project combines a WhatsApp MCP (Model Context Protocol) server with a modern web interface. It allows you to interact with your WhatsApp messages through a beautiful web UI while maintaining privacy and security.
 
-With this you can search you personal Whatsapp messages, search your contacts and send messages to either individuals or groups.
+## Project Structure
 
-It connects to your **personal WhatsApp account** directly via the Whatsapp web multidevice API (using the [whatsmeow](https://github.com/tulir/whatsmeow) library). All your messages are stored locally in a SQLite database and only sent to an LLM (such as Claude) when the agent accesses them through tools (which you control).
+```
+whatsapp-mcp/
+├── whatsapp-bridge/      # Go application that connects to WhatsApp
+├── whatsapp-mcp-server/  # Python MCP server that manages WhatsApp data
+├── whatsapp-web-ui/      # Next.js frontend application
+│   ├── frontend/        # Frontend code
+│   └── api-server/      # Go API server
+└── whatsapp-web-ui-frontend/  # Deployed frontend (separate repo)
+```
 
-Here's an example of what you can do when it's connected to Claude.
+## Prerequisites
 
-![WhatsApp MCP](./example-use.png)
+- Go 1.20 or later
+- Python 3.8 or later
+- Docker and Docker Compose
+- Node.js 18 or later
+- UV (Python package manager): `curl -LsSf https://astral.sh/uv/install.sh | sh`
 
-> To get updates on this and other projects I work on [enter your email here](https://docs.google.com/forms/d/1rTF9wMBTN0vPfzWuQa2BjfGKdKIpTbyeKxhPMcEzgyI/preview)
+## Setup Instructions
 
-## Installation
+### 1. WhatsApp Bridge Setup
 
-### Prerequisites
+The WhatsApp Bridge is responsible for connecting to your WhatsApp account:
 
-- Go
-- Python 3.6+
-- Anthropic Claude Desktop app (or Cursor)
-- UV (Python package manager), install with `curl -LsSf https://astral.sh/uv/install.sh | sh`
+```bash
+cd whatsapp-bridge
+go run main.go
+```
 
-### Steps
+On first run, you'll see a QR code in the terminal. Scan this with your WhatsApp mobile app:
+1. Open WhatsApp on your phone
+2. Go to Settings → Linked Devices
+3. Tap "Link a Device"
+4. Scan the QR code shown in the terminal
 
-1. **Clone this repository**
+The bridge will maintain this connection and store the session locally.
 
-   ```bash
-   git clone https://github.com/lharries/whatsapp-mcp.git
-   cd whatsapp-mcp
-   ```
+### 2. WhatsApp MCP Server Setup
 
-2. **Run the WhatsApp bridge**
+The MCP server manages the WhatsApp connection and stores messages:
 
-   Navigate to the whatsapp-bridge directory and run the Go application:
+```bash
+cd whatsapp-mcp-server
+uv venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv pip install -r requirements.txt
+python main.py
+```
 
-   ```bash
-   cd whatsapp-bridge
-   go run main.go
-   ```
+### 3. API Server Setup
 
-   The first time you run it, you will be prompted to scan a QR code. Scan the QR code with your WhatsApp mobile app to authenticate.
+The API server communicates between the frontend and the MCP server:
 
-   After approximately 20 days, you will might need to re-authenticate.
+```bash
+cd whatsapp-web-ui/api-server
+go run main.go
+```
 
-3. **Connect to the the MCP server**
+Set these environment variables:
+```env
+PORT=3001
+FRONTEND_URL=http://localhost:3000
+ANTHROPIC_API_KEY=your_claude_api_key_here
+MCP_SERVER_PATH=/path/to/whatsapp-mcp-server
+```
 
-   Copy the below json with the appropriate {{PATH}} values:
+### 4. Frontend Setup
 
-   ```json
-   {
-     "mcpServers": {
-       "whatsapp": {
-         "command": "{{PATH}}/.local/bin/uv", // Run `which uv` and place the output here
-         "args": [
-           "--directory",
-           "{{PATH}}/whatsapp-mcp/whatsapp-mcp-server", // cd into the repo, run `pwd` and enter the output here + "/whatsapp-mcp-server"
-           "run",
-           "main.py"
-         ]
-       }
-     }
-   }
-   ```
+The frontend is a Next.js application that provides the web interface:
 
-   For **Claude**, save this as `claude_desktop_config.json` in your Claude Desktop configuration directory at:
+```bash
+cd whatsapp-web-ui-frontend
+npm install
+npm run dev
+```
 
-   ```
-   ~/Library/Application Support/Claude/claude_desktop_config.json
-   ```
+Set these environment variables:
+```env
+NEXT_PUBLIC_API_URL=http://localhost:3001
+```
 
-   For **Cursor**, save this as `mcp.json` in your Cursor configuration directory at:
+## Deployment
 
-   ```
-   ~/.cursor/mcp.json
-   ```
+### Frontend (Netlify)
+1. Create a new repository on GitHub
+2. Push the frontend code to the repository
+3. Connect the repository to Netlify
+4. Set environment variables in Netlify:
+   - `NEXT_PUBLIC_API_URL`: Your API server URL
 
-4. **Restart Claude Desktop / Cursor**
+### API Server (Railway)
+1. Push the API server code to GitHub
+2. Connect to Railway
+3. Set environment variables in Railway:
+   - `PORT`: 3001
+   - `FRONTEND_URL`: Your frontend URL
+   - `ANTHROPIC_API_KEY`: Your Claude API key
+   - `MCP_SERVER_PATH`: Path to your MCP server
 
-   Open Claude Desktop and you should now see WhatsApp as an available integration.
+### WhatsApp Bridge and MCP Server
+These components should run locally or on a server you control, as they need direct access to your WhatsApp account.
 
-   Or restart Cursor.
+## Environment Variables
 
-## Architecture Overview
+### Frontend (.env.local)
+```env
+NEXT_PUBLIC_API_URL=http://localhost:3001
+```
 
-This application consists of two main components:
-
-1. **Go WhatsApp Bridge** (`whatsapp-bridge/`): A Go application that connects to WhatsApp's web API, handles authentication via QR code, and stores message history in SQLite. It serves as the bridge between WhatsApp and the MCP server.
-
-2. **Python MCP Server** (`whatsapp-mcp-server/`): A Python server implementing the Model Context Protocol (MCP), which provides standardized tools for Claude to interact with WhatsApp data and send/receive messages.
-
-### Data Storage
-
-- All message history is stored in a SQLite database within the `whatsapp-bridge/store/` directory
-- The database maintains tables for chats and messages
-- Messages are indexed for efficient searching and retrieval
-
-## Usage
-
-Once connected, you can interact with your WhatsApp contacts through Claude, leveraging Claude's AI capabilities in your WhatsApp conversations.
-
-### MCP Tools
-
-Claude can access the following tools to interact with WhatsApp:
-
-- **search_contacts**: Search for contacts by name or phone number
-- **list_messages**: Retrieve messages with optional filters and context
-- **list_chats**: List available chats with metadata
-- **get_chat**: Get information about a specific chat
-- **get_direct_chat_by_contact**: Find a direct chat with a specific contact
-- **get_contact_chats**: List all chats involving a specific contact
-- **get_last_interaction**: Get the most recent message with a contact
-- **get_message_context**: Retrieve context around a specific message
-- **send_message**: Send a WhatsApp message to a specified phone number
-
-## Technical Details
-
-1. Claude sends requests to the Python MCP server
-2. The MCP server queries the Go bridge for WhatsApp data or directly to the SQLite database
-3. The Go accesses the WhatsApp API and keeps the SQLite database up to date
-4. Data flows back through the chain to Claude
-5. When sending messages, the request flows from Claude through the MCP server to the Go bridge and to WhatsApp
+### API Server (.env)
+```env
+PORT=3001
+FRONTEND_URL=http://localhost:3000
+ANTHROPIC_API_KEY=your_claude_api_key_here
+MCP_SERVER_PATH=/path/to/whatsapp-mcp-server
+```
 
 ## Troubleshooting
 
-- If you encounter permission issues when running uv, you may need to add it to your PATH or use the full path to the executable.
-- Make sure both the Go application and the Python server are running for the integration to work properly.
+1. **No Chats Showing**
+   - Ensure the WhatsApp Bridge is running and connected
+   - Check the MCP server logs for any errors
+   - Verify the API server can connect to the MCP server
 
-### Authentication Issues
+2. **Cannot Send Messages**
+   - Check if the WhatsApp Bridge is still connected
+   - Verify the API server's MCP_SERVER_PATH is correct
+   - Check the browser console for any errors
 
-- **QR Code Not Displaying**: If the QR code doesn't appear, try restarting the authentication script. If issues persist, check if your terminal supports displaying QR codes.
-- **WhatsApp Already Logged In**: If your session is already active, the Go bridge will automatically reconnect without showing a QR code.
-- **Device Limit Reached**: WhatsApp limits the number of linked devices. If you reach this limit, you'll need to remove an existing device from WhatsApp on your phone (Settings > Linked Devices).
-- **No Messages Loading**: After initial authentication, it can take several minutes for your message history to load, especially if you have many chats.
-- **WhatsApp Out of Sync**: If your WhatsApp messages get out of sync with the bridge, delete both database files (`whatsapp-bridge/store/messages.db` and `whatsapp-bridge/store/whatsapp.db`) and restart the bridge to re-authenticate.
+3. **Connection Issues**
+   - Ensure all services are running
+   - Check environment variables are set correctly
+   - Verify network connectivity between components
 
-For additional Claude Desktop integration troubleshooting, see the [MCP documentation](https://modelcontextprotocol.io/quickstart/server#claude-for-desktop-integration-issues). The documentation includes helpful tips for checking logs and resolving common issues.
+## Security Considerations
+
+1. The WhatsApp Bridge and MCP server should run on a secure, private network
+2. Never expose the WhatsApp Bridge or MCP server directly to the internet
+3. Use HTTPS for all external communications
+4. Keep your API keys and credentials secure
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
