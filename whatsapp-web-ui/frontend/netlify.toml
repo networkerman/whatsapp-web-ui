@@ -1,6 +1,8 @@
 [build]
+  base = "frontend"
   command = "npm install && npm run build"
   publish = ".next"
+  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF ./frontend/"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs@5.10.1"
@@ -8,6 +10,11 @@
 [build.environment]
   NEXT_USE_NETLIFY_EDGE = "true"
   NODE_VERSION = "18"
+  GO_VERSION = "1.19"
+
+[functions]
+  directory = "api-server"
+  node_bundler = "esbuild"
 
 [[redirects]]
   from = "/_next/static/*"
