@@ -1,54 +1,37 @@
-# Base stage for common dependencies
-FROM node:18-alpine AS base
-RUN apk add --no-cache python3 py3-pip
+# Use the official Golang image to create a build artifact.
+FROM golang:1.21-alpine AS builder
 
-# Python stage for MCP server dependencies
-FROM base AS python
-RUN pip3 install --no-cache-dir requests
-
-# Dependencies stage
-FROM base AS deps
+# Set the working directory
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci
 
-# Builder stage
-FROM deps AS builder
-WORKDIR /app
+# Copy go mod and sum files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy the source code
 COPY . .
-RUN npm run build
 
-# Runner stage
-FROM base AS runner
+# Build the application
+RUN CGO_ENABLED=0 GOOS=linux go build -o main .
+
+# Use a minimal image for the final stage
+FROM alpine:latest
+
+# Install CA certificates for HTTPS requests
+RUN apk --no-cache add ca-certificates
+
 WORKDIR /app
 
-# Create non-root user
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
-
-# Copy built files from builder
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/node_modules ./node_modules
-
-# Copy MCP server files from the parent directory
-COPY ../whatsapp-mcp-server ./whatsapp-mcp-server
-
-# Install Python dependencies for MCP server
-COPY --from=python /usr/local/lib/python3.9/site-packages /usr/local/lib/python3.9/site-packages
-
-# Set environment variables
-ENV NODE_ENV=production
-ENV PORT=3001
-
-# Set user permissions
-RUN chown -R nextjs:nodejs /app
-
-# Switch to non-root user
-USER nextjs
+# Copy the binary from builder
+COPY --from=builder /app/main .
 
 # Expose port
-EXPOSE 3001
+EXPOSE 8080
 
-# Start the server
-CMD ["npm", "start"] 
+# Set environment variables
+ENV PORT=8080
+
+# Run the binary
+CMD ["./main"] 
