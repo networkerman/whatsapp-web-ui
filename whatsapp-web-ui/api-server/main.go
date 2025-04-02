@@ -78,59 +78,20 @@ func getChats(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	// Get the WhatsApp bridge URL from environment
-	mcpServerPath := os.Getenv("MCP_SERVER_PATH")
-	log.Printf("MCP_SERVER_PATH: %s", mcpServerPath)
-	log.Printf("All environment variables in getChats: %v", os.Environ())
+	// Return mock data for testing
+	log.Printf("Returning mock data")
+	mockChats := []Chat{
+		{ID: "1", Name: "Test Chat 1", LastMessage: "Hello!", Timestamp: time.Now().Unix()},
+		{ID: "2", Name: "Test Chat 2", LastMessage: "Hi there!", Timestamp: time.Now().Unix()},
+		{ID: "3", Name: "Test Chat 3", LastMessage: "How are you?", Timestamp: time.Now().Unix()},
+	}
 
-	if mcpServerPath == "" {
-		log.Printf("MCP_SERVER_PATH not set, using mock data")
-		// Return mock data as fallback
-		mockChats := []Chat{
-			{ID: "1", Name: "Test Chat 1", LastMessage: "Hello!", Timestamp: time.Now().Unix()},
-			{ID: "2", Name: "Test Chat 2", LastMessage: "Hi there!", Timestamp: time.Now().Unix()},
-		}
-		json.NewEncoder(w).Encode(mockChats)
+	if err := json.NewEncoder(w).Encode(mockChats); err != nil {
+		log.Printf("Error encoding mock data: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
 	}
-
-	// Fetch chats from WhatsApp bridge
-	url := mcpServerPath + "/api/chats"
-	log.Printf("Fetching chats from: %s", url)
-
-	// Create a client with timeout
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
-	resp, err := client.Get(url)
-	if err != nil {
-		log.Printf("Error fetching chats from WhatsApp bridge: %v", err)
-		http.Error(w, "Failed to fetch chats: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer resp.Body.Close()
-
-	log.Printf("WhatsApp bridge response status: %d", resp.StatusCode)
-	log.Printf("WhatsApp bridge response headers: %v", resp.Header)
-
-	if resp.StatusCode != http.StatusOK {
-		log.Printf("WhatsApp bridge returned status: %d", resp.StatusCode)
-		http.Error(w, "Failed to fetch chats", resp.StatusCode)
-		return
-	}
-
-	// Read the response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("Error reading response body: %v", err)
-		http.Error(w, "Failed to read response", http.StatusInternalServerError)
-		return
-	}
-	log.Printf("WhatsApp bridge response body: %s", string(body))
-
-	// Write the response body
-	w.Write(body)
+	log.Printf("Successfully sent mock data")
 }
 
 func getMessages(w http.ResponseWriter, r *http.Request) {
