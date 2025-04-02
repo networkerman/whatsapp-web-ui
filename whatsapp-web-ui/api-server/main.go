@@ -47,6 +47,7 @@ func main() {
 	})
 
 	// Routes
+	r.HandleFunc("/", healthCheck).Methods("GET", "OPTIONS")
 	r.HandleFunc("/api/chats", getChats).Methods("GET", "OPTIONS")
 	r.HandleFunc("/api/messages/{chatId}", getMessages).Methods("GET", "OPTIONS")
 	r.HandleFunc("/api/messages/{chatId}", sendMessage).Methods("POST", "OPTIONS")
@@ -62,6 +63,16 @@ func main() {
 	if err := http.ListenAndServe(":"+port, c.Handler(r)); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func healthCheck(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Health check request received")
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	json.NewEncoder(w).Encode(map[string]string{
+		"status": "ok",
+		"time":   time.Now().String(),
+	})
 }
 
 func getChats(w http.ResponseWriter, r *http.Request) {
