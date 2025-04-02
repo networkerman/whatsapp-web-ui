@@ -32,6 +32,7 @@ func main() {
 	log.Printf("FRONTEND_URL: %s", os.Getenv("FRONTEND_URL"))
 	log.Printf("PORT: %s", os.Getenv("PORT"))
 	log.Printf("MCP_SERVER_PATH: %s", os.Getenv("MCP_SERVER_PATH"))
+	log.Printf("All environment variables: %v", os.Environ())
 
 	r := mux.NewRouter()
 
@@ -80,6 +81,8 @@ func getChats(w http.ResponseWriter, r *http.Request) {
 	// Get the WhatsApp bridge URL from environment
 	mcpServerPath := os.Getenv("MCP_SERVER_PATH")
 	log.Printf("MCP_SERVER_PATH: %s", mcpServerPath)
+	log.Printf("All environment variables in getChats: %v", os.Environ())
+
 	if mcpServerPath == "" {
 		log.Printf("MCP_SERVER_PATH not set, using mock data")
 		// Return mock data as fallback
