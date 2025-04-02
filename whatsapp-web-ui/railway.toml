@@ -1,10 +1,11 @@
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile.api"
+dockerfilePath = "api-server/Dockerfile"
+buildPath = "api-server"
 
 [deploy]
-startCommand = "npm start"
+startCommand = "./main"
 healthcheckPath = "/"
 healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 10 
+restartPolicyMaxRetries = 3 
