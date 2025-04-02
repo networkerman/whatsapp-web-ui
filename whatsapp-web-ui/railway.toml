@@ -1,7 +1,6 @@
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "api-server/Dockerfile"
-buildPath = "api-server"
+dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "./main"

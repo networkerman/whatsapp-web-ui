@@ -9,13 +9,13 @@ RUN pip3 install --no-cache-dir requests
 # Dependencies stage
 FROM base AS deps
 WORKDIR /app
-COPY api-server/package*.json ./
+COPY package*.json ./
 RUN npm ci
 
 # Builder stage
 FROM deps AS builder
 WORKDIR /app
-COPY api-server/ .
+COPY . .
 RUN npm run build
 
 # Runner stage
@@ -39,7 +39,7 @@ COPY --from=python /usr/local/lib/python3.9/site-packages /usr/local/lib/python3
 
 # Set environment variables
 ENV NODE_ENV=production
-ENV PORT=3001
+ENV PORT=8080
 
 # Set user permissions
 RUN chown -R nextjs:nodejs /app
@@ -48,7 +48,7 @@ RUN chown -R nextjs:nodejs /app
 USER nextjs
 
 # Expose port
-EXPOSE 3001
+EXPOSE 8080
 
 # Start the server
 CMD ["npm", "start"] 
