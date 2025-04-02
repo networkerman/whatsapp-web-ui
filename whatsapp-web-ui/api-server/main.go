@@ -70,6 +70,13 @@ func getChats(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Request URL: %s", r.URL.String())
 	log.Printf("Request origin: %s", r.Header.Get("Origin"))
 
+	// Set cache control headers
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
 	// Get the WhatsApp bridge URL from environment
 	mcpServerPath := os.Getenv("MCP_SERVER_PATH")
 	log.Printf("MCP_SERVER_PATH: %s", mcpServerPath)
@@ -80,8 +87,6 @@ func getChats(w http.ResponseWriter, r *http.Request) {
 			{ID: "1", Name: "Test Chat 1", LastMessage: "Hello!", Timestamp: time.Now().Unix()},
 			{ID: "2", Name: "Test Chat 2", LastMessage: "Hi there!", Timestamp: time.Now().Unix()},
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
 		json.NewEncoder(w).Encode(mockChats)
 		return
 	}
@@ -120,13 +125,6 @@ func getChats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("WhatsApp bridge response body: %s", string(body))
-
-	// Forward the response
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
-	w.Header().Set("Pragma", "no-cache")
-	w.Header().Set("Expires", "0")
 
 	// Write the response body
 	w.Write(body)
