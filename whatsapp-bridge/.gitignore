@@ -1,0 +1,21 @@
+# WhatsApp session data
+store/
+
+# Go build files
+main
+*.exe
+*.dll
+*.so
+*.dylib
+
+# IDE files
+.idea/
+.vscode/
+
+# Logs
+*.log
+
+# Environment variables
+.env
+.env.local
+.env.*.local 
