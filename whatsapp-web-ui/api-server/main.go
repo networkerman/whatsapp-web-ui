@@ -36,14 +36,18 @@ func main() {
 
 	r := mux.NewRouter()
 
-	// Enable CORS with more permissive settings for development
+	// Enable CORS with specific origins
 	c := cors.New(cors.Options{
-		AllowedOrigins:   []string{"*"}, // Allow all origins for testing
+		AllowedOrigins: []string{
+			"https://messageai.netlify.app",
+			"http://localhost:3000",
+			os.Getenv("FRONTEND_URL"),
+		},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"*"},
 		Debug:            true,
-		AllowCredentials: true, // Allow credentials
-		MaxAge:           300,  // Set preflight cache time
+		AllowCredentials: true,
+		MaxAge:           300,
 	})
 
 	// Routes
