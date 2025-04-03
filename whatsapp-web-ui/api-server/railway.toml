@@ -1,10 +1,17 @@
+# Railway configuration for Go API server
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "./Dockerfile"
+dockerfilePath = "./Dockerfile"  # Dockerfile in the api-server directory
 
 [deploy]
-startCommand = "./main"
-healthcheckPath = "/api/test-connection"
+startCommand = "./main"  # Run the Go binary
+healthcheckPath = "/api/test-connection"  # Go server health check endpoint
 healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 3 
+restartPolicyMaxRetries = 3
+
+# Environment variables will be set in Railway dashboard
+# Required variables:
+# - PORT=8080
+# - MCP_SERVER_PATH=https://f84f-14-142-143-138.ngrok-free.app
+# - FRONTEND_URL=your-frontend-url 
