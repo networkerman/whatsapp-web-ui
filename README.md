@@ -62,14 +62,6 @@ cd whatsapp-web-ui/api-server
 go run main.go
 ```
 
-Set these environment variables:
-```env
-PORT=3001
-FRONTEND_URL=http://localhost:3000
-ANTHROPIC_API_KEY=your_claude_api_key_here
-MCP_SERVER_PATH=/path/to/whatsapp-mcp-server
-```
-
 ### 4. Frontend Setup
 
 The frontend is a Next.js application that provides the web interface:
@@ -80,63 +72,78 @@ npm install
 npm run dev
 ```
 
-Set these environment variables:
+## Environment Variables
+
+### Frontend (Netlify)
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:3001
+NEXT_PUBLIC_API_URL=https://your-railway-app.up.railway.app
+```
+
+### API Server (Railway)
+```env
+PORT=3001
+FRONTEND_URL=https://messageai.netlify.app
+ANTHROPIC_API_KEY=your_claude_api_key_here
+MCP_SERVER_PATH=https://your-railway-app.up.railway.app
 ```
 
 ## Deployment
 
-### Frontend (Netlify)
-1. Create a new repository on GitHub
-2. Push the frontend code to the repository
-3. Connect the repository to Netlify
-4. Set environment variables in Netlify:
-   - `NEXT_PUBLIC_API_URL`: Your API server URL
+The project is set up for automatic deployment:
 
-### API Server (Railway)
-1. Push the API server code to GitHub
-2. Connect to Railway
-3. Set environment variables in Railway:
-   - `PORT`: 3001
-   - `FRONTEND_URL`: Your frontend URL
-   - `ANTHROPIC_API_KEY`: Your Claude API key
-   - `MCP_SERVER_PATH`: Path to your MCP server
+1. **GitHub Repository**: https://github.com/networkerman/whatsapp-web-ui.git
+2. **Railway**: Automatically deploys the API server and WhatsApp bridge
+3. **Netlify**: Hosts the frontend at https://messageai.netlify.app
 
-### WhatsApp Bridge and MCP Server
-These components should run locally or on a server you control, as they need direct access to your WhatsApp account.
+### Environment Variables Setup
 
-## Environment Variables
+1. **In Railway**:
+   - Go to your Railway project dashboard
+   - Navigate to the "Variables" tab
+   - Add the required environment variables:
+     ```
+     PORT=3001
+     FRONTEND_URL=https://messageai.netlify.app
+     ANTHROPIC_API_KEY=your_claude_api_key
+     MCP_SERVER_PATH=https://your-railway-app.up.railway.app
+     ```
 
-### Frontend (.env.local)
-```env
-NEXT_PUBLIC_API_URL=http://localhost:3001
-```
-
-### API Server (.env)
-```env
-PORT=3001
-FRONTEND_URL=http://localhost:3000
-ANTHROPIC_API_KEY=your_claude_api_key_here
-MCP_SERVER_PATH=/path/to/whatsapp-mcp-server
-```
+2. **In Netlify**:
+   - Go to your Netlify dashboard
+   - Navigate to Site settings > Environment variables
+   - Add:
+     ```
+     NEXT_PUBLIC_API_URL=https://your-railway-app.up.railway.app
+     ```
 
 ## Troubleshooting
 
-1. **No Chats Showing**
-   - Ensure the WhatsApp Bridge is running and connected
-   - Check the MCP server logs for any errors
-   - Verify the API server can connect to the MCP server
+### 1. No Chats Showing
+- Ensure the WhatsApp Bridge is running and connected
+- Check the MCP server logs for any errors
+- Verify the API server can connect to the MCP server
+- Check the browser console for any errors
+- Verify all environment variables are set correctly
 
-2. **Cannot Send Messages**
-   - Check if the WhatsApp Bridge is still connected
-   - Verify the API server's MCP_SERVER_PATH is correct
-   - Check the browser console for any errors
+### 2. Cannot Send Messages
+- Check if the WhatsApp Bridge is still connected
+- Verify the API server's MCP_SERVER_PATH is correct
+- Check the browser console for any errors
 
-3. **Connection Issues**
-   - Ensure all services are running
-   - Check environment variables are set correctly
-   - Verify network connectivity between components
+### 3. Connection Issues
+- Ensure all services are running
+- Check environment variables are set correctly
+- Verify network connectivity between components
+- Check Railway and Netlify deployment logs
+
+### 4. WhatsApp Bridge Issues
+- If the QR code doesn't appear, try restarting the bridge
+- If WhatsApp shows "Device Limit Reached", remove an existing device from WhatsApp settings
+- If messages get out of sync, delete the database files and re-authenticate:
+  ```bash
+  rm whatsapp-bridge/store/messages.db
+  rm whatsapp-bridge/store/whatsapp.db
+  ```
 
 ## Security Considerations
 
@@ -144,6 +151,7 @@ MCP_SERVER_PATH=/path/to/whatsapp-mcp-server
 2. Never expose the WhatsApp Bridge or MCP server directly to the internet
 3. Use HTTPS for all external communications
 4. Keep your API keys and credentials secure
+5. Monitor your Railway and Netlify logs for any suspicious activity
 
 ## Contributing
 
