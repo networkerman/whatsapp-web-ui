@@ -3,9 +3,9 @@ builder = "DOCKERFILE"
 dockerfilePath = "whatsapp-bridge/Dockerfile"
 
 [deploy]
-startCommand = "./main"
-healthcheckPath = "/api/chats"
-healthcheckTimeout = 100
+startCommand = "./whatsapp-bridge"
+healthcheckPath = "/api/status"
+healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
