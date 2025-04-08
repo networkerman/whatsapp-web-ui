@@ -2,32 +2,38 @@ FROM golang:1.24-alpine
 
 WORKDIR /app
 
-# Install git and build dependencies
-RUN apk add --no-cache git gcc musl-dev
+# Install build dependencies
+RUN apk add --no-cache gcc musl-dev
 
-# Create store directory with proper permissions
-RUN mkdir -p /data/store && \
-    chown -R nobody:nobody /data/store && \
-    chmod -R 755 /data/store
-
+# Copy go mod and sum files
 COPY go.mod go.sum ./
+
+# Download all dependencies
 RUN go mod download
 
+# Copy the source code
 COPY . .
-RUN go mod tidy
-RUN go build -o main .
 
-EXPOSE 8080
+# Create store directory with correct permissions
+RUN mkdir -p /data/store && \
+    chown -R nobody:nobody /data/store && \
+    chmod 755 /data/store
 
-# Environment variables for store configuration
+# Set environment variables
 ENV STORE_PATH=/data/store
 ENV STORE_PERMISSIONS=755
 
 # Create a non-root user
 RUN adduser -D -g '' appuser
+
+# Switch to non-root user
 USER appuser
 
-# Define volume for persistent storage
-VOLUME ["/data/store"]
+# Build the application
+RUN go build -o main .
 
+# Expose the port
+EXPOSE 8080
+
+# Command to run the executable
 CMD ["./main"] 
