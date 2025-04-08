@@ -1,6 +1,6 @@
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "whatsapp-bridge/Dockerfile"
+dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "./whatsapp-bridge"
