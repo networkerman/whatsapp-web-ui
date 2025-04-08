@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sort"
 	"syscall"
 	"time"
 
@@ -146,22 +145,38 @@ func (store *MessageStore) GetMessages(chatJID string, limit int) ([]Message, er
 }
 
 // Get all chats
-func (store *MessageStore) GetChats() (map[string]time.Time, error) {
-	rows, err := store.db.Query("SELECT jid, last_message_time FROM chats ORDER BY last_message_time DESC")
+func (store *MessageStore) GetChats() ([]Chat, error) {
+	rows, err := store.db.Query("SELECT jid, name, last_message_time FROM chats ORDER BY last_message_time DESC")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	chats := make(map[string]time.Time)
+	var chats []Chat
 	for rows.Next() {
-		var jid string
+		var chat Chat
 		var lastMessageTime time.Time
-		err := rows.Scan(&jid, &lastMessageTime)
+		err := rows.Scan(&chat.ID, &chat.Name, &lastMessageTime)
 		if err != nil {
 			return nil, err
 		}
-		chats[jid] = lastMessageTime
+		chat.Timestamp = lastMessageTime.Unix()
+
+		// Get last message from database
+		var lastMessage string
+		err = store.db.QueryRow(`
+			SELECT content 
+			FROM messages 
+			WHERE chat_jid = ? 
+			ORDER BY timestamp DESC 
+			LIMIT 1
+		`, chat.ID).Scan(&lastMessage)
+		if err != nil {
+			lastMessage = "" // No last message found
+		}
+		chat.LastMessage = lastMessage
+
+		chats = append(chats, chat)
 	}
 
 	return chats, nil
@@ -365,33 +380,39 @@ func main() {
 
 	// QR code endpoint
 	router.HandleFunc("/api/qr", func(w http.ResponseWriter, r *http.Request) {
+		if client.client.IsConnected() {
+			http.Error(w, "Already connected", http.StatusBadRequest)
+			return
+		}
+
 		if client.client.Store.ID != nil {
-			http.Error(w, "Already connected to WhatsApp", http.StatusBadRequest)
+			http.Error(w, "Already logged in", http.StatusBadRequest)
 			return
 		}
 
-		if client.qrCode == "" {
-			http.Error(w, "No QR code available", http.StatusNotFound)
-			return
-		}
-
-		// Generate QR code as PNG
-		qr, err := qrcode.New(client.qrCode, qrcode.Medium)
+		// Get the QR code
+		evt, err := client.client.GetQRChannel(context.Background())
 		if err != nil {
-			http.Error(w, "Failed to generate QR code", http.StatusInternalServerError)
+			http.Error(w, "Failed to get QR channel", http.StatusInternalServerError)
 			return
 		}
 
-		// Convert QR code to PNG
-		png, err := qr.PNG(256)
-		if err != nil {
-			http.Error(w, "Failed to generate QR code image", http.StatusInternalServerError)
-			return
-		}
+		// Wait for QR code
+		qr := <-evt
+		if qr.Event == "code" {
+			// Generate QR code image
+			png, err := qrcode.Encode(qr.Code, qrcode.Medium, 256)
+			if err != nil {
+				http.Error(w, "Failed to generate QR code", http.StatusInternalServerError)
+				return
+			}
 
-		// Serve the QR code
-		w.Header().Set("Content-Type", "image/png")
-		w.Write(png)
+			// Set headers and send QR code
+			w.Header().Set("Content-Type", "image/png")
+			w.Write(png)
+		} else {
+			http.Error(w, "Failed to get QR code", http.StatusInternalServerError)
+		}
 	})
 
 	// Health check endpoint
@@ -409,46 +430,10 @@ func main() {
 			return
 		}
 
-		// Convert map to array of Chat objects
-		var chatList []Chat
-		for jid, timestamp := range chats {
-			// Get chat name from database
-			var name string
-			err := store.db.QueryRow("SELECT name FROM chats WHERE jid = ?", jid).Scan(&name)
-			if err != nil {
-				name = jid // Fallback to JID if name not found
-			}
-
-			// Get last message from database
-			var lastMessage string
-			err = store.db.QueryRow(`
-				SELECT content 
-				FROM messages 
-				WHERE chat_jid = ? 
-				ORDER BY timestamp DESC 
-				LIMIT 1
-			`, jid).Scan(&lastMessage)
-			if err != nil {
-				lastMessage = "" // No last message found
-			}
-
-			chatList = append(chatList, Chat{
-				ID:          jid,
-				Name:        name,
-				LastMessage: lastMessage,
-				Timestamp:   timestamp.Unix(),
-			})
-		}
-
-		// Sort chats by timestamp in descending order
-		sort.Slice(chatList, func(i, j int) bool {
-			return chatList[i].Timestamp > chatList[j].Timestamp
-		})
-
 		// Debug logging
-		fmt.Printf("Returning chat list: %+v\n", chatList)
+		fmt.Printf("Returning chat list: %+v\n", chats)
 
-		json.NewEncoder(w).Encode(chatList)
+		json.NewEncoder(w).Encode(chats)
 	})
 
 	// Messages endpoint
@@ -524,9 +509,28 @@ func main() {
 
 	// Add status endpoint
 	router.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
-		status := client.GetStatus()
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(status)
+		if !client.client.IsConnected() {
+			if client.client.Store.ID == nil {
+				// No ID stored, need to login
+				json.NewEncoder(w).Encode(map[string]string{
+					"status":  "waiting_for_qr",
+					"message": "Please scan the QR code to connect",
+				})
+			} else {
+				// Not connected but has ID
+				json.NewEncoder(w).Encode(map[string]string{
+					"status":  "disconnected",
+					"message": "WhatsApp is disconnected. Please wait while we try to reconnect...",
+				})
+			}
+		} else {
+			// Connected
+			json.NewEncoder(w).Encode(map[string]string{
+				"status":  "connected",
+				"message": "Connected! Loading your chats...",
+			})
+		}
 	})
 
 	// Start server
