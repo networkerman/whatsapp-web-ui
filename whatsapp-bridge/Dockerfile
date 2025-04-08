@@ -23,14 +23,15 @@ RUN mkdir -p /data/store && \
 ENV STORE_PATH=/data/store
 ENV STORE_PERMISSIONS=755
 
+# Build the application
+RUN go build -o main .
+
 # Create a non-root user
-RUN adduser -D -g '' appuser
+RUN adduser -D -g '' appuser && \
+    chown -R appuser:appuser /app /data/store
 
 # Switch to non-root user
 USER appuser
-
-# Build the application
-RUN go build -o main .
 
 # Expose the port
 EXPOSE 8080
