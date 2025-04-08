@@ -264,9 +264,17 @@ func (wa *WhatsAppClient) Connect() error {
 		}
 		for evt := range qrChan {
 			if evt.Event == "code" {
-				// Store the QR code
-				wa.qrCode = []byte(evt.Code)
-				fmt.Printf("\nQR code received. Please scan it with WhatsApp to log in\n\n")
+				// Generate QR code image
+				png, err := qrcode.Encode(evt.Code, qrcode.Medium, 256)
+				if err != nil {
+					return fmt.Errorf("failed to generate QR code: %v", err)
+				}
+				// Store the QR code image
+				wa.qrMutex.Lock()
+				wa.qrCode = png
+				wa.qrMutex.Unlock()
+
+				fmt.Printf("\nQR code generated. Please scan it with WhatsApp to log in\n\n")
 				fmt.Println("Waiting for connection...")
 			}
 		}

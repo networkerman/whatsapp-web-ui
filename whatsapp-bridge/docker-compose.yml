@@ -6,13 +6,14 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ~/whatsapp-store:/data/store
+      - whatsapp_store:/data/store
     environment:
       - STORE_PATH=/data/store
       - STORE_PERMISSIONS=755
-      - FRONTEND_URL=${FRONTEND_URL}
+      - FRONTEND_URL=${FRONTEND_URL:-https://messageai.netlify.app}
       - PORT=8080
     restart: unless-stopped
+    user: "1000:1000"  # Match the appuser UID:GID
 
 volumes:
   whatsapp_store:
