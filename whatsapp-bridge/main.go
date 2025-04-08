@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -424,14 +425,51 @@ func main() {
 			return
 		}
 
-		chats, err := store.GetChats()
+		// Get all chats from the database
+		chats := make([]Chat, 0)
+		rows, err := store.db.Query(`
+			SELECT c.jid, c.name, c.last_message_time, m.content 
+			FROM chats c 
+			LEFT JOIN messages m ON m.chat_jid = c.jid 
+			WHERE m.timestamp = c.last_message_time OR m.timestamp IS NULL
+			ORDER BY c.last_message_time DESC
+		`)
 		if err != nil {
 			http.Error(w, "Failed to get chats", http.StatusInternalServerError)
 			return
 		}
+		defer rows.Close()
 
-		// Debug logging
-		fmt.Printf("Returning chat list: %+v\n", chats)
+		for rows.Next() {
+			var chat Chat
+			var lastMessage sql.NullString
+			var lastMessageTime sql.NullTime
+			err := rows.Scan(&chat.ID, &chat.Name, &lastMessageTime, &lastMessage)
+			if err != nil {
+				continue
+			}
+
+			if lastMessageTime.Valid {
+				chat.Timestamp = lastMessageTime.Time.Unix()
+			}
+			if lastMessage.Valid {
+				chat.LastMessage = lastMessage.String
+			}
+
+			// Try to get contact info if it's not a group chat
+			if !strings.HasSuffix(chat.ID, "@g.us") {
+				jid, _ := types.ParseJID(chat.ID)
+				if contact, err := client.client.Store.Contacts.GetContact(jid); err == nil {
+					if contact.PushName != "" {
+						chat.Name = contact.PushName
+					} else if contact.BusinessName != "" {
+						chat.Name = contact.BusinessName
+					}
+				}
+			}
+
+			chats = append(chats, chat)
+		}
 
 		json.NewEncoder(w).Encode(chats)
 	})
