@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  whatsapp-bridge:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ~/whatsapp-store:/data/store
+    environment:
+      - STORE_PATH=/data/store
+      - STORE_PERMISSIONS=755
+      - FRONTEND_URL=${FRONTEND_URL}
+      - PORT=8080
+    restart: unless-stopped
+
+volumes:
+  whatsapp_store:
+    driver: local 
