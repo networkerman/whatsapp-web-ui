@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -185,9 +186,10 @@ func (store *MessageStore) GetChats() ([]Chat, error) {
 
 // WhatsAppClient represents our WhatsApp client
 type WhatsAppClient struct {
-	client *whatsmeow.Client
-	store  *MessageStore
-	qrCode string
+	client  *whatsmeow.Client
+	store   *MessageStore
+	qrCode  []byte
+	qrMutex sync.Mutex
 }
 
 // Create a new WhatsApp client
@@ -263,7 +265,7 @@ func (wa *WhatsAppClient) Connect() error {
 		for evt := range qrChan {
 			if evt.Event == "code" {
 				// Store the QR code
-				wa.qrCode = evt.Code
+				wa.qrCode = []byte(evt.Code)
 				fmt.Printf("\nQR code received. Please scan it with WhatsApp to log in\n\n")
 				fmt.Println("Waiting for connection...")
 			}
@@ -329,7 +331,7 @@ func (c *WhatsAppClient) GetStatus() ConnectionStatus {
 	}
 
 	if !c.client.IsConnected() {
-		if c.qrCode != "" {
+		if c.qrCode != nil {
 			return ConnectionStatus{
 				Status:  "waiting_for_qr",
 				Message: "Please scan QR code to connect",
@@ -381,6 +383,26 @@ func main() {
 
 	// QR code endpoint
 	router.HandleFunc("/api/qr", func(w http.ResponseWriter, r *http.Request) {
+		// Add CORS headers for the image
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		client.qrMutex.Lock()
+		defer client.qrMutex.Unlock()
+
+		// If we already have a QR code, return it
+		if client.qrCode != nil {
+			w.Header().Set("Content-Type", "image/png")
+			w.Write(client.qrCode)
+			return
+		}
+
 		if client.client.IsConnected() {
 			http.Error(w, "Already connected", http.StatusBadRequest)
 			return
@@ -392,27 +414,34 @@ func main() {
 		}
 
 		// Get the QR code
-		evt, err := client.client.GetQRChannel(context.Background())
+		qrChan, _ := client.client.GetQRChannel(context.Background())
+		err := client.client.Connect()
 		if err != nil {
-			http.Error(w, "Failed to get QR channel", http.StatusInternalServerError)
+			http.Error(w, "Failed to connect", http.StatusInternalServerError)
 			return
 		}
 
-		// Wait for QR code
-		qr := <-evt
-		if qr.Event == "code" {
-			// Generate QR code image
-			png, err := qrcode.Encode(qr.Code, qrcode.Medium, 256)
-			if err != nil {
-				http.Error(w, "Failed to generate QR code", http.StatusInternalServerError)
-				return
-			}
+		select {
+		case evt := <-qrChan:
+			if evt.Event == "code" {
+				// Generate QR code image
+				png, err := qrcode.Encode(evt.Code, qrcode.Medium, 256)
+				if err != nil {
+					http.Error(w, "Failed to generate QR code", http.StatusInternalServerError)
+					return
+				}
 
-			// Set headers and send QR code
-			w.Header().Set("Content-Type", "image/png")
-			w.Write(png)
-		} else {
-			http.Error(w, "Failed to get QR code", http.StatusInternalServerError)
+				// Store the QR code
+				client.qrCode = png
+
+				// Set headers and send QR code
+				w.Header().Set("Content-Type", "image/png")
+				w.Write(png)
+			} else {
+				http.Error(w, "Failed to get QR code", http.StatusInternalServerError)
+			}
+		case <-time.After(30 * time.Second):
+			http.Error(w, "Timeout waiting for QR code", http.StatusRequestTimeout)
 		}
 	})
 
