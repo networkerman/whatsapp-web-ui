@@ -1,8 +1,6 @@
-module whatsapp-bridge
+module github.com/networkerman/whatsapp-web-ui/whatsapp-bridge
 
-go 1.23.0
-
-toolchain go1.24.1
+go 1.22
 
 require (
 	github.com/gorilla/mux v1.8.1

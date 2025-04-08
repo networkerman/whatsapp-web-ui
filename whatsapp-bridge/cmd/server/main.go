@@ -4,10 +4,10 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/ud/whatsapp-mcp/internal/api"
-	"github.com/ud/whatsapp-mcp/internal/config"
-	"github.com/ud/whatsapp-mcp/internal/store"
-	"github.com/ud/whatsapp-mcp/internal/whatsapp"
+	"github.com/networkerman/whatsapp-web-ui/whatsapp-bridge/internal/api"
+	"github.com/networkerman/whatsapp-web-ui/whatsapp-bridge/internal/config"
+	"github.com/networkerman/whatsapp-web-ui/whatsapp-bridge/internal/store"
+	"github.com/networkerman/whatsapp-web-ui/whatsapp-bridge/internal/whatsapp"
 )
 
 func main() {
