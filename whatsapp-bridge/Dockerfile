@@ -1,44 +1,28 @@
-FROM golang:1.24-alpine
+FROM golang:1.22 as builder
 
-# Install build dependencies
-RUN apk add --no-cache gcc musl-dev
-
-# Set working directory
 WORKDIR /app
-
-# Copy go mod and sum files
 COPY go.mod go.sum ./
-
-# Download dependencies
 RUN go mod download
 
-# Copy source code
 COPY . .
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o whatsapp-bridge
 
-# Create store directory with proper permissions
-RUN mkdir -p /data/store && \
-    chown -R nobody:nobody /data/store && \
+FROM alpine:3.19
+
+RUN apk add --no-cache ca-certificates
+
+WORKDIR /app
+COPY --from=builder /app/whatsapp-bridge .
+
+RUN adduser -D -u 1000 appuser && \
+    mkdir -p /data/store && \
+    chown -R appuser:appuser /data/store && \
     chmod 755 /data/store
 
-# Build the application
-RUN CGO_ENABLED=1 go build -o main .
-
-# Set environment variables
 ENV STORE_PATH=/data/store
 ENV STORE_PERMISSIONS=755
 
-# Create non-root user
-RUN adduser -D -u 1000 appuser && \
-    chown -R appuser:appuser /app
-
-# Switch to non-root user
 USER appuser
-
-# Define volume for persistent storage
-VOLUME ["/data/store"]
-
-# Expose port
 EXPOSE 8080
 
-# Run the application
-CMD ["./main"] 
+CMD ["./whatsapp-bridge"] 
