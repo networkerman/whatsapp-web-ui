@@ -1,10 +1,18 @@
 FROM golang:1.22 as builder
 
 WORKDIR /app
-COPY go.mod go.sum ./
+
+# Copy only go.mod and go.sum first for better caching
+COPY go.mod .
+COPY go.sum .
+
+# Download dependencies
 RUN go mod download
 
+# Copy the rest of the source code
 COPY . .
+
+# Build the application
 RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o whatsapp-bridge
 
 FROM alpine:3.19
