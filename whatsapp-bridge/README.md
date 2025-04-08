@@ -1,94 +1,86 @@
 # WhatsApp Bridge
 
-A Node.js application that provides a WebSocket interface to interact with WhatsApp Web using Puppeteer.
+A WhatsApp Web API bridge that allows you to interact with WhatsApp Web programmatically.
 
 ## Features
 
-- Automated WhatsApp Web interaction
-- WebSocket server for sending and receiving messages
-- QR code scanning for authentication
-- Real-time status monitoring
+- WhatsApp Web client integration
+- REST API for sending and receiving messages
+- QR code authentication
+- Persistent session storage
+- Message history
+- Real-time updates
 
 ## Prerequisites
 
-- Node.js 18 or higher
-- npm or yarn
-- Chrome/Chromium browser
+- Go 1.22 or later
+- Docker (optional)
+- Railway account (for deployment)
 
-## Installation
+## Local Development
 
-1. Clone the repository
+1. Clone the repository:
+```bash
+git clone https://github.com/networkerman/whatsapp-web-ui.git
+cd whatsapp-web-ui/whatsapp-bridge
+```
+
 2. Install dependencies:
 ```bash
-npm install
+go mod download
 ```
 
-## Usage
-
-1. Build the project:
+3. Run the server:
 ```bash
-npm run build
+go run main.go
 ```
 
-2. Start the server:
+## Docker Development
+
+1. Build the Docker image:
 ```bash
-npm start
+docker build -t whatsapp-bridge .
 ```
 
-3. Open Chrome and scan the QR code that appears in the browser window
-
-4. Connect to the WebSocket server (default port: 8080) and send messages using the following format:
-```json
-{
-    "type": "send_message",
-    "to": "1234567890",
-    "message": "Hello, World!"
-}
+2. Run the container:
+```bash
+docker run -p 8080:8080 -v $(pwd)/store:/data/store whatsapp-bridge
 ```
 
-## WebSocket API
+## Deployment on Railway
 
-### Message Types
-
-1. `send_message`: Send a message to a specific number
-   ```json
-   {
-       "type": "send_message",
-       "to": "1234567890",
-       "message": "Hello, World!"
-   }
-   ```
-
-2. `get_status`: Check the authentication status
-   ```json
-   {
-       "type": "get_status"
-   }
-   ```
-
-### Response Format
-
-Success response:
-```json
-{
-    "status": "authenticated"
-}
+1. Fork or clone the repository:
+```bash
+git clone https://github.com/networkerman/whatsapp-web-ui.git
 ```
 
-Error response:
-```json
-{
-    "error": "Error message here"
-}
-```
+2. Connect your GitHub repository to Railway:
+   - Go to [Railway Dashboard](https://railway.app/dashboard)
+   - Click "New Project"
+   - Select "Deploy from GitHub repo"
+   - Choose `whatsapp-web-ui` repository
+   - Select the `api-server` branch
 
-## Development
+3. Configure environment variables in Railway:
+   - `PORT`: 8080
+   - `STORE_PATH`: /data/store
+   - `STORE_PERMISSIONS`: 755
 
-The project is written in TypeScript and uses:
-- Puppeteer for browser automation
-- ws for WebSocket server
-- TypeScript for type safety
+4. Add persistent storage:
+   - Go to the "Volumes" tab
+   - Create a new volume
+   - Mount path: `/data/store`
+
+The application will automatically deploy when you push changes to the `api-server` branch.
+
+## API Endpoints
+
+- `GET /api/status` - Check connection status
+- `GET /api/qr` - Get QR code for authentication
+- `GET /api/chats` - List all chats
+- `GET /api/messages/{chatID}` - Get messages from a specific chat
+- `POST /api/send` - Send a message
 
 ## License
 
-MIT 
+MIT License 
