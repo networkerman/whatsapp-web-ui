@@ -1,14 +1,14 @@
 module github.com/networkerman/whatsapp-web-ui/whatsapp-bridge
 
-go 1.22
+go 1.24
 
 require (
 	github.com/gorilla/mux v1.8.1
-	github.com/mattn/go-sqlite3 v1.14.24
-	github.com/rs/cors v1.10.1
+	github.com/mattn/go-sqlite3 v1.14.27
+	github.com/rs/cors v1.11.1
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
-	go.mau.fi/whatsmeow v0.0.0-20250318233852-06705625cf82
-	google.golang.org/protobuf v1.36.5
+	go.mau.fi/whatsmeow v0.0.0-20250402091807-b0caa1b76088
+	google.golang.org/protobuf v1.36.6
 )
 
 require (

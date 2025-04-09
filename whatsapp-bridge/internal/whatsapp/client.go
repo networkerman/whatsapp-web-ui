@@ -17,12 +17,17 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// Client represents a WhatsApp client
 type Client struct {
 	client     *whatsmeow.Client
 	eventStore EventStore
 	qrCode     []byte
 	qrMutex    sync.RWMutex
 	logger     waLog.Logger
+	mu         sync.Mutex
+	qrChan     chan string
+	connecting bool
+	store      *MessageStore
 }
 
 type EventStore interface {
@@ -35,6 +40,7 @@ type ConnectionStatus struct {
 	Message string `json:"message,omitempty"`
 }
 
+// NewClient creates a new WhatsApp client
 func NewClient(storePath string, eventStore EventStore) (*Client, error) {
 	logger := waLog.Stdout("Client", "DEBUG", true)
 	container, err := sqlstore.New("sqlite3", fmt.Sprintf("file:%s/device.db?_foreign_keys=on", storePath), logger)
@@ -52,15 +58,17 @@ func NewClient(storePath string, eventStore EventStore) (*Client, error) {
 		client:     client,
 		eventStore: eventStore,
 		logger:     logger,
+		store:      NewMessageStore(),
 	}
 
 	client.AddEventHandler(wa.handleEvent)
 	return wa, nil
 }
 
-func (c *Client) Connect(ctx context.Context) error {
+// Start starts the WhatsApp client
+func (c *Client) Start() error {
 	if c.client.Store.ID == nil {
-		qrChan, _ := c.client.GetQRChannel(ctx)
+		qrChan, _ := c.client.GetQRChannel(context.Background())
 		err := c.client.Connect()
 		if err != nil {
 			return fmt.Errorf("failed to connect: %v", err)
@@ -78,8 +86,8 @@ func (c *Client) Connect(ctx context.Context) error {
 				c.qrCode = png
 				c.qrMutex.Unlock()
 			}
-		case <-ctx.Done():
-			return ctx.Err()
+		case <-context.Background().Done():
+			return context.Background().Err()
 		}
 	} else {
 		if err := c.client.Connect(); err != nil {
@@ -89,69 +97,122 @@ func (c *Client) Connect(ctx context.Context) error {
 	return nil
 }
 
+// Stop stops the WhatsApp client
+func (c *Client) Stop() error {
+	if c.client != nil {
+		c.client.Disconnect()
+	}
+	return nil
+}
+
+// GetChats returns all chats
+func (c *Client) GetChats() []Chat {
+	return c.store.GetChats()
+}
+
+// GetMessages returns all messages for a chat
+func (c *Client) GetMessages(chatID string) []Message {
+	return c.store.GetMessages(chatID)
+}
+
+// StoreMessage stores a message for a chat
+func (c *Client) StoreMessage(chatID string, msg Message) {
+	c.store.StoreMessage(chatID, msg)
+}
+
+// StoreChat stores a chat
+func (c *Client) StoreChat(chat Chat) {
+	c.store.StoreChat(chat)
+}
+
 func (c *Client) GetQRCode(ctx context.Context) ([]byte, error) {
-	log.Printf("GetQRCode called - Client state: connected=%v, hasQR=%v",
-		c.client.IsConnected(), c.qrCode != nil)
-
-	c.qrMutex.RLock()
-	if c.qrCode != nil {
-		log.Printf("Returning existing QR code (size: %d bytes)", len(c.qrCode))
-		defer c.qrMutex.RUnlock()
-		return c.qrCode, nil
-	}
-	c.qrMutex.RUnlock() // Release read lock before acquiring write lock
-
-	c.qrMutex.Lock()
-	defer c.qrMutex.Unlock()
-
-	// Double-check after acquiring write lock
-	if c.qrCode != nil {
-		log.Printf("QR code was generated while waiting for lock (size: %d bytes)", len(c.qrCode))
-		return c.qrCode, nil
-	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	if c.client.IsConnected() {
-		log.Printf("Cannot generate QR code - client is already connected")
 		return nil, fmt.Errorf("already connected")
 	}
 
-	log.Printf("Starting QR code generation process")
-	qrChan, err := c.client.GetQRChannel(ctx)
-	if err != nil {
-		log.Printf("Failed to get QR channel: %v", err)
-		return nil, fmt.Errorf("failed to get QR channel: %v", err)
+	// Check if we already have a QR code
+	c.qrMutex.RLock()
+	if c.qrCode != nil {
+		qrCode := c.qrCode
+		c.qrMutex.RUnlock()
+		log.Printf("Returning existing QR code")
+		return qrCode, nil
+	}
+	c.qrMutex.RUnlock()
+
+	// Create a new QR channel if needed
+	if c.qrChan == nil {
+		log.Printf("Creating new QR channel")
+		c.qrChan = make(chan string, 1)
 	}
 
-	log.Printf("Attempting to connect client")
-	err = c.client.Connect()
-	if err != nil {
-		log.Printf("Failed to connect for QR generation: %v", err)
-		return nil, fmt.Errorf("failed to connect: %v", err)
-	}
-
-	log.Printf("Waiting for QR code event")
-	select {
-	case evt := <-qrChan:
-		if evt.Event == "code" {
-			log.Printf("Received QR code event, generating PNG")
-			png, err := qrcode.Encode(evt.Code, qrcode.Medium, 256)
-			if err != nil {
-				log.Printf("Failed to encode QR code: %v", err)
-				return nil, fmt.Errorf("failed to generate QR code: %v", err)
-			}
-			c.qrCode = png
-			log.Printf("Successfully generated QR code (size: %d bytes)", len(png))
-			return png, nil
+	// Start connection if not already started
+	if !c.connecting {
+		log.Printf("Starting new WhatsApp connection")
+		if err := c.startConnection(); err != nil {
+			return nil, fmt.Errorf("failed to start connection: %v", err)
 		}
-		log.Printf("Received unexpected QR event: %s", evt.Event)
-		return nil, fmt.Errorf("unexpected QR event: %s", evt.Event)
-	case <-ctx.Done():
-		log.Printf("Context cancelled while waiting for QR code")
-		return nil, ctx.Err()
-	case <-time.After(30 * time.Second):
-		log.Printf("Timeout waiting for QR code")
-		return nil, fmt.Errorf("timeout waiting for QR code")
+	} else {
+		log.Printf("Connection already in progress")
 	}
+
+	// Wait for QR code with timeout
+	deadline, _ := ctx.Deadline()
+	log.Printf("Waiting for QR code with timeout: %v", deadline)
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case qrCode := <-c.qrChan:
+		if qrCode == "" {
+			return nil, fmt.Errorf("empty QR code received")
+		}
+		log.Printf("Received QR code, encoding as image")
+		// Generate QR code image with higher quality for better scanning
+		qr, err := qrcode.Encode(qrCode, qrcode.High, 256)
+		if err != nil {
+			return nil, fmt.Errorf("failed to encode QR code: %v", err)
+		}
+		c.qrMutex.Lock()
+		c.qrCode = qr
+		c.qrMutex.Unlock()
+		return qr, nil
+	}
+}
+
+func (c *Client) startConnection() error {
+	if c.connecting {
+		return nil
+	}
+	c.connecting = true
+
+	// Clear any existing client
+	if c.client != nil {
+		c.client.Disconnect()
+		c.client = nil
+	}
+
+	// Initialize new client
+	client := whatsmeow.NewClient(c.client.Store, nil)
+	c.client = client
+
+	// Set up event handler
+	client.AddEventHandler(c.handleEvent)
+
+	// Connect in background
+	go func() {
+		err := client.Connect()
+		if err != nil {
+			log.Printf("Failed to connect: %v", err)
+			c.mu.Lock()
+			c.connecting = false
+			c.mu.Unlock()
+		}
+	}()
+
+	return nil
 }
 
 func (c *Client) SendMessage(ctx context.Context, recipient, message string) error {
@@ -209,45 +270,36 @@ func (c *Client) GetStatus() ConnectionStatus {
 	}
 }
 
-func (c *Client) Close() error {
-	if c.client != nil {
-		c.client.Disconnect()
-	}
-	return nil
-}
-
 func (c *Client) handleEvent(evt interface{}) {
 	switch v := evt.(type) {
-	case *events.Connected:
-		log.Printf("WhatsApp client connected")
-		c.qrMutex.Lock()
-		c.qrCode = nil // Clear QR code on successful connection
-		c.qrMutex.Unlock()
-	case *events.Disconnected:
-		log.Printf("WhatsApp client disconnected")
-	case *events.LoggedOut:
-		log.Printf("WhatsApp client logged out")
-		c.qrMutex.Lock()
-		c.qrCode = nil
-		c.qrMutex.Unlock()
-	case *events.Message:
-		if err := c.eventStore.StoreMessage(
-			v.Info.ID,
-			v.Info.Chat.String(),
-			v.Info.Sender.String(),
-			v.Message.GetConversation(),
-			v.Info.Timestamp,
-			false,
-		); err != nil {
-			c.logger.Errorf("Error storing message: %v", err)
+	case *events.QR:
+		log.Printf("QR code event received")
+		if len(v.Codes) > 0 {
+			log.Printf("Processing QR code [%d codes available]", len(v.Codes))
+			c.mu.Lock()
+			if c.qrChan != nil {
+				// Use the first QR code in the array
+				c.qrChan <- v.Codes[0]
+			}
+			c.mu.Unlock()
+		} else {
+			log.Printf("QR code event received but no codes available")
 		}
 
-		if err := c.eventStore.StoreChat(
-			v.Info.Chat.String(),
-			v.Info.PushName,
-			v.Info.Timestamp,
-		); err != nil {
-			c.logger.Errorf("Error storing chat: %v", err)
+	case *events.Connected:
+		c.mu.Lock()
+		c.connecting = false
+		// Clear QR code and channel on successful connection
+		c.qrCode = nil
+		if c.qrChan != nil {
+			close(c.qrChan)
+			c.qrChan = nil
 		}
+		c.mu.Unlock()
+
+	case *events.Disconnected:
+		c.mu.Lock()
+		c.connecting = false
+		c.mu.Unlock()
 	}
 }

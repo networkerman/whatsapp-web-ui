@@ -1,13 +1,15 @@
 [build]
-builder = "dockerfile"
+builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "./main"
-healthcheckPath = "/api/chats"
+startCommand = "./whatsapp-bridge"
+healthcheckPath = "/api/status"
 healthcheckTimeout = 10
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
 
 [env]
-PORT = "8080" 
+PORT = "8080"
+STORE_PATH = "/data/store"
+STORE_PERMISSIONS = "777"

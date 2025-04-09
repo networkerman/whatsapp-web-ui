@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 )
 
 type Handler struct {
@@ -107,15 +108,26 @@ func (h *Handler) HandleQR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.client.IsConnected() {
+	// Check connection status first
+	status := h.client.GetStatus()
+	if status.Status == "connected" {
 		log.Printf("QR code request rejected - client already connected")
 		http.Error(w, "Already connected", http.StatusBadRequest)
 		return
 	}
 
+	// Create a context with timeout for QR code generation
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
 	log.Printf("Requesting QR code from client")
-	qrCode, err := h.client.GetQRCode(r.Context())
+	qrCode, err := h.client.GetQRCode(ctx)
 	if err != nil {
+		if err == context.DeadlineExceeded {
+			log.Printf("QR code generation timed out")
+			http.Error(w, "Timeout waiting for QR code", http.StatusRequestTimeout)
+			return
+		}
 		if err.Error() == "already connected" {
 			log.Printf("QR code generation failed - client connected during request")
 			http.Error(w, "Already connected", http.StatusBadRequest)
