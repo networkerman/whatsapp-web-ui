@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 
+	_ "github.com/mattn/go-sqlite3" // Import SQLite driver
 	"github.com/networkerman/whatsapp-web-ui/whatsapp-bridge/internal/api"
 	"github.com/networkerman/whatsapp-web-ui/whatsapp-bridge/internal/config"
 	"github.com/networkerman/whatsapp-web-ui/whatsapp-bridge/internal/whatsapp"
