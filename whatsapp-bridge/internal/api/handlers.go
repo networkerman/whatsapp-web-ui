@@ -98,14 +98,19 @@ func (h *Handler) HandleQR(w http.ResponseWriter, r *http.Request) {
 		r.Header.Get("Origin"), r.Method, r.Header.Get("Accept"))
 	h.setCORSHeaders(w, r)
 
+	// Add aggressive cache prevention headers for QR code
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
+
 	if r.Method == "OPTIONS" {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	// Check if client accepts image/png
+	// Check if client accepts image/png - use a more lenient check
 	accept := r.Header.Get("Accept")
-	if accept != "*/*" && !strings.Contains(accept, "image/png") {
+	if accept != "" && accept != "*/*" && !strings.Contains(accept, "image") && !strings.Contains(accept, "*") {
 		log.Printf("Client doesn't accept image/png: %s", accept)
 		http.Error(w, "Client must accept image/png", http.StatusNotAcceptable)
 		return
@@ -123,8 +128,17 @@ func (h *Handler) HandleQR(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	log.Printf("Requesting QR code from client")
-	qrCode, err := h.client.GetQRCode(ctx)
+	// Extract query parameters
+	refresh := r.URL.Query().Get("refresh") == "true"
+	
+	// Create a context with parameters
+	params := map[string]string{
+		"refresh": fmt.Sprintf("%t", refresh),
+	}
+	ctxWithParams := context.WithValue(ctx, "params", params)
+
+	log.Printf("Requesting QR code from client (refresh=%v)", refresh)
+	qrCode, err := h.client.GetQRCode(ctxWithParams)
 	if err != nil {
 		if err == context.DeadlineExceeded {
 			log.Printf("QR code generation timed out")
@@ -150,5 +164,6 @@ func (h *Handler) HandleQR(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Successfully got QR code (size: %d bytes)", len(qrCode))
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(qrCode)))
+	w.Header().Set("ETag", fmt.Sprintf("\"%x\"", time.Now().UnixNano()))
 	w.Write(qrCode)
 }

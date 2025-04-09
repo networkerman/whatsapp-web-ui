@@ -134,15 +134,37 @@ func (c *Client) GetQRCode(ctx context.Context) ([]byte, error) {
 		return nil, fmt.Errorf("already connected")
 	}
 
-	// Check if we already have a QR code
+	// Get URL query parameters from context
+	params := ctx.Value("params")
+	
+	// Check if refresh is requested or we don't have a QR code yet
+	freshQR := false
+	if params != nil {
+		if p, ok := params.(map[string]string); ok {
+			freshQR = p["refresh"] == "true"
+		}
+	}
+	
 	c.qrMutex.RLock()
-	if c.qrCode != nil {
+	hasExistingQR := c.qrCode != nil
+	c.qrMutex.RUnlock()
+	
+	// If we have an existing QR and refresh wasn't requested, return it
+	if hasExistingQR && !freshQR {
+		c.qrMutex.RLock()
 		qrCode := c.qrCode
 		c.qrMutex.RUnlock()
-		log.Printf("Returning existing QR code")
+		log.Printf("Returning existing QR code (fresh=%v)", freshQR)
 		return qrCode, nil
 	}
-	c.qrMutex.RUnlock()
+	
+	// If refresh was requested, clear existing QR code
+	if freshQR {
+		c.qrMutex.Lock()
+		c.qrCode = nil
+		c.qrMutex.Unlock()
+		log.Printf("Cleared existing QR code for refresh")
+	}
 
 	// Create a new QR channel if needed
 	if c.qrChan == nil {
