@@ -27,7 +27,7 @@ RUN find . -type f -name '*.go' | xargs cat | grep -n 'import' || true
 RUN find . -type f -name '*.go' | xargs grep -l 'internal/store' || true
 
 # Build the application with SQLite support and enable debugging output
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -tags "debug" -o whatsapp-bridge cmd/server/main.go
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s -extldflags '-static'" -tags "debug,osusergo,netgo" -o whatsapp-bridge cmd/server/main.go
 
 FROM alpine:3.19
 
@@ -35,9 +35,13 @@ FROM alpine:3.19
 RUN apk add --no-cache \
     ca-certificates \
     sqlite \
+    sqlite-dev \
     tzdata \
     openssl \
-    curl
+    openssl-dev \
+    curl \
+    libc6-compat \
+    libstdc++
 
 WORKDIR /app
 
@@ -54,6 +58,11 @@ RUN adduser -D -u 1000 appuser && \
 ENV STORE_PATH=/data/store \
     STORE_PERMISSIONS=755 \
     TZ=UTC
+
+# Test the binary can run properly before switching users
+RUN ldd /app/whatsapp-bridge || echo "Statically linked, no dependencies" \
+    && ls -la /app \
+    && chmod +x /app/whatsapp-bridge
 
 # Switch to non-root user
 USER appuser

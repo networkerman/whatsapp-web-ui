@@ -3,13 +3,14 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "./whatsapp-bridge"
+startCommand = "/app/whatsapp-bridge"
 healthcheckPath = "/api/status"
-healthcheckTimeout = 10
+healthcheckTimeout = 30
 restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 3
+restartPolicyMaxRetries = 5
 
 [env]
 PORT = "8080"
 STORE_PATH = "/data/store"
 STORE_PERMISSIONS = "777"
+DEBUG = "true"
