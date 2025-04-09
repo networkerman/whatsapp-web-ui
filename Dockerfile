@@ -1,63 +1,74 @@
-FROM golang:1.24 as builder
+# Build stage
+FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
-# Install build dependencies
+# Install dependencies required for CGO/SQLite
 RUN apt-get update && apt-get install -y \
     gcc \
+    g++ \
     sqlite3 \
     libsqlite3-dev \
-    libssl-dev \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# Create dummy store package to satisfy imports
-RUN mkdir -p /app/internal/store
-RUN echo 'package store' > /app/internal/store/store.go
-
-# Copy the entire source code first
+# Copy the whatsapp-bridge directory
 COPY whatsapp-bridge/ .
 
-# Download dependencies and build
+# Print directory structure for debugging
+RUN ls -la && \
+    find . -name '*.go' | sort
+
+# Download dependencies
 RUN go mod download && go mod tidy
 
-# Print directory structure for debugging
-RUN ls -la
-RUN find . -name '*.go' | grep -v vendor
-
-# Build the application with SQLite support
+# Build with CGO enabled for SQLite support
 RUN CGO_ENABLED=1 GOOS=linux go build -o whatsapp-bridge cmd/server/main.go
 
+# Test if binary is executable and check library dependencies
+RUN chmod +x /app/whatsapp-bridge && \
+    ls -l /app/whatsapp-bridge && \
+    ldd /app/whatsapp-bridge
+
+# Final stage
 FROM debian:bookworm-slim
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     sqlite3 \
-    openssl \
+    libsqlite3-0 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
+# Copy the binary from builder
 COPY --from=builder /app/whatsapp-bridge .
 
-RUN useradd -m -u 1000 appuser && \
-    mkdir -p /data/store && \
-    chown -R appuser:appuser /data/store && \
-    chmod 777 /data/store
+# Create data directory with appropriate permissions
+RUN mkdir -p /data/store && \
+    chmod -R 777 /data/store
 
-# Set environment variables
+# Create startup script to ensure data directory exists
+RUN printf '#!/bin/bash\n\
+echo "Starting WhatsApp Bridge..."\n\
+echo "Data directory: $STORE_PATH"\n\
+mkdir -p "$STORE_PATH"\n\
+chmod -R "$STORE_PERMISSIONS" "$STORE_PATH"\n\
+echo "Directory contents:"\n\
+ls -la "$STORE_PATH"\n\
+exec /app/whatsapp-bridge\n' > /app/start.sh && \
+    chmod +x /app/start.sh
+
+# Expose port
+EXPOSE 8080
+
+# Define environment variables
 ENV STORE_PATH=/data/store \
     STORE_PERMISSIONS=777 \
     PORT=8080 \
     DEBUG=true
 
-# Test binary executable
-RUN chmod +x /app/whatsapp-bridge && \
-    ls -l /app/whatsapp-bridge && \
-    ldd /app/whatsapp-bridge
-
-USER appuser
-EXPOSE 8080
-
 # Define the command to run
-CMD ["/app/whatsapp-bridge"]
+CMD ["/app/start.sh"]
