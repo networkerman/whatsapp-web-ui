@@ -1,16 +1,16 @@
 # Build stage
-FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
 # Install dependencies required for CGO/SQLite
-RUN apt-get update && apt-get install -y \
+RUN apk add --no-cache \
     gcc \
     g++ \
-    sqlite3 \
-    libsqlite3-dev \
-    pkg-config \
-    && rm -rf /var/lib/apt/lists/*
+    musl-dev \
+    sqlite \
+    sqlite-dev \
+    pkgconfig
 
 # Copy the whatsapp-bridge directory
 COPY whatsapp-bridge/ .
@@ -31,15 +31,14 @@ RUN chmod +x /app/whatsapp-bridge && \
     ldd /app/whatsapp-bridge
 
 # Final stage
-FROM debian:bookworm-slim
+FROM alpine:latest
 
 # Install runtime dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apk add --no-cache \
     ca-certificates \
-    sqlite3 \
-    libsqlite3-0 \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+    sqlite \
+    sqlite-libs \
+    curl
 
 WORKDIR /app
 
