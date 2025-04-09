@@ -6,24 +6,19 @@ import (
 
 	"github.com/networkerman/whatsapp-web-ui/whatsapp-bridge/internal/api"
 	"github.com/networkerman/whatsapp-web-ui/whatsapp-bridge/internal/config"
-	"github.com/networkerman/whatsapp-web-ui/whatsapp-bridge/internal/store"
 	"github.com/networkerman/whatsapp-web-ui/whatsapp-bridge/internal/whatsapp"
 )
 
 func main() {
 	cfg := config.New()
 
-	messageStore, err := store.NewMessageStore(cfg.StorePath)
-	if err != nil {
-		log.Fatalf("Failed to create message store: %v", err)
-	}
-	defer messageStore.Close()
+	messageStore := whatsapp.NewMessageStore()
 
 	whatsappClient, err := whatsapp.NewClient(cfg.StorePath, messageStore)
 	if err != nil {
 		log.Fatalf("Failed to create WhatsApp client: %v", err)
 	}
-	defer whatsappClient.Close()
+	defer whatsappClient.Stop()
 
 	apiConfig := &api.Config{
 		AllowedOrigins: cfg.AllowedOrigins,

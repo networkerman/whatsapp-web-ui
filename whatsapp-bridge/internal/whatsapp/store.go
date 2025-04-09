@@ -2,6 +2,7 @@ package whatsapp
 
 import (
 	"sync"
+	"time"
 )
 
 // MessageStore stores messages and chats
@@ -19,11 +20,18 @@ func NewMessageStore() *MessageStore {
 	}
 }
 
-// StoreMessage stores a message for a chat
-func (s *MessageStore) StoreMessage(chatID string, msg Message) {
+// StoreMessage implements EventStore.StoreMessage
+func (s *MessageStore) StoreMessage(id, chatJID, sender, content string, timestamp time.Time, isFromMe bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.messages[chatID] = append(s.messages[chatID], msg)
+	msg := Message{
+		Time:     timestamp,
+		Sender:   sender,
+		Content:  content,
+		IsFromMe: isFromMe,
+	}
+	s.messages[chatJID] = append(s.messages[chatJID], msg)
+	return nil
 }
 
 // GetMessages returns all messages for a chat
@@ -33,11 +41,16 @@ func (s *MessageStore) GetMessages(chatID string) []Message {
 	return s.messages[chatID]
 }
 
-// StoreChat stores a chat
-func (s *MessageStore) StoreChat(chat Chat) {
+// StoreChat implements EventStore.StoreChat
+func (s *MessageStore) StoreChat(jid, name string, lastMessageTime time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.chats[chat.ID] = chat
+	s.chats[jid] = Chat{
+		ID:        jid,
+		Name:      name,
+		Timestamp: lastMessageTime.UnixNano(),
+	}
+	return nil
 }
 
 // GetChats returns all stored chats

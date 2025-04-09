@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/networkerman/whatsapp-web-ui/whatsapp-bridge/internal/whatsapp"
 )
 
 type Handler struct {
@@ -21,14 +23,15 @@ type Config struct {
 }
 
 type WhatsAppClient interface {
-	IsConnected() bool
-	GetStatus() ConnectionStatus
+	GetStatus() whatsapp.ConnectionStatus
 	GetQRCode(ctx context.Context) ([]byte, error)
+	Start() error
+	Stop() error
 }
 
 type MessageStore interface {
-	GetChats() (interface{}, error)
-	GetMessages(chatID string, limit int) (interface{}, error)
+	GetChats() []whatsapp.Chat
+	GetMessages(chatID string) []whatsapp.Message
 }
 
 func NewHandler(client WhatsAppClient, store MessageStore, config *Config) *Handler {

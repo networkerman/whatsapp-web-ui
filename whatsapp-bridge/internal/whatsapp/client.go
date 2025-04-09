@@ -117,12 +117,13 @@ func (c *Client) GetMessages(chatID string) []Message {
 
 // StoreMessage stores a message for a chat
 func (c *Client) StoreMessage(chatID string, msg Message) {
-	c.store.StoreMessage(chatID, msg)
+	c.store.StoreMessage("", chatID, msg.Sender, msg.Content, msg.Time, msg.IsFromMe)
 }
 
 // StoreChat stores a chat
 func (c *Client) StoreChat(chat Chat) {
-	c.store.StoreChat(chat)
+	timestamp := time.Unix(0, chat.Timestamp)
+	c.store.StoreChat(chat.ID, chat.Name, timestamp)
 }
 
 func (c *Client) GetQRCode(ctx context.Context) ([]byte, error) {

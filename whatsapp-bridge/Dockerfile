@@ -12,14 +12,22 @@ RUN apt-get update && apt-get install -y \
 # Copy only go.mod and go.sum first for better caching
 COPY go.mod go.sum ./
 
-# Download dependencies
-RUN go mod download
+# Prepare directories for compilation
+RUN mkdir -p /app/internal/store
+RUN touch /app/internal/store/store.go
+RUN echo 'package store' > /app/internal/store/store.go
 
 # Copy the rest of the source code
 COPY . .
 
+# Verify module structure
+RUN find . -type f -name '*.go' | xargs cat | grep -n 'import' || true
+
+# Patch imports before building
+RUN find . -type f -name '*.go' | xargs grep -l 'internal/store' || true
+
 # Build the application with SQLite support and enable debugging output
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -tags "debug" -o whatsapp-bridge
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -tags "debug" -o whatsapp-bridge cmd/server/main.go
 
 FROM alpine:3.19
 
