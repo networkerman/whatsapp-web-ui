@@ -5,13 +5,18 @@ RUN echo "Build timestamp: $(date)" > /build_timestamp
 
 WORKDIR /app
 
-# Install required system dependencies
+# Install required system dependencies for static compilation
 RUN apt-get update && apt-get install -y \
     gcc \
+    musl-tools \
     sqlite3 \
     libsqlite3-dev \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# Set up for static compilation with musl
+RUN ln -s /usr/bin/musl-gcc /usr/local/bin/musl-gcc
+ENV CC=musl-gcc
 
 # Copy Go modules first for better caching
 COPY go.mod go.sum ./
@@ -31,64 +36,44 @@ RUN find . -type f -name '*.go' | xargs cat | grep -n 'import' || true
 # Patch imports before building
 RUN find . -type f -name '*.go' | xargs grep -l 'internal/store' || true
 
-# Build the application with SQLite support and enable debugging output
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o whatsapp-bridge cmd/server/main.go
+# Build a completely static binary with no dependencies
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 CC=musl-gcc go build -ldflags="-linkmode external -extldflags '-static'" -tags "netgo,osusergo,static,sqlite_omit_load_extension" -o whatsapp-bridge cmd/server/main.go
 
-# Use Debian instead of Alpine for better compatibility with CGO
-FROM debian:bookworm-slim
+# Verify it's truly static
+RUN file whatsapp-bridge | grep "statically linked"
+RUN ldd whatsapp-bridge || echo "No dynamic dependencies (this is good!)"
 
-# Force cache invalidation on runtime stage too
-COPY --from=builder /build_timestamp /build_timestamp
+# Print binary info
+RUN ls -l whatsapp-bridge
+RUN sha256sum whatsapp-bridge
 
-# Install required runtime dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    sqlite3 \
-    libsqlite3-dev \
-    tzdata \
-    openssl \
-    libssl-dev \
-    curl \
-    procps \
-    && rm -rf /var/lib/apt/lists/*
+# Use scratch - completely empty base image
+FROM scratch
 
+# Copy TLS certificates for HTTPS
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# Create minimal application directory structure
 WORKDIR /app
 
-# Copy the binary from builder
-COPY --from=builder /app/whatsapp-bridge .
+# Copy the static binary from builder
+COPY --from=builder /app/whatsapp-bridge /app/whatsapp-bridge
 
-# Set up the storage directory with proper permissions
-RUN useradd -m -u 1000 appuser && \
-    mkdir -p /data/store && \
-    chown -R appuser:appuser /data/store /app && \
-    chmod 777 /data/store
+# Create data directory in advance
+WORKDIR /data
 
+# No need to create users - scratch doesn't have users
 # Set environment variables
-ENV STORE_PATH=/data/store \
-    STORE_PERMISSIONS=755 \
-    TZ=UTC
-
-# Verify the binary has all required libraries
-RUN chmod +x /app/whatsapp-bridge && \
-    echo "Library dependencies:" && \
-    ldd /app/whatsapp-bridge
-
-# Copy the entrypoint script
-COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
-
-# Switch to non-root user
-USER appuser
+ENV STORE_PATH=/data \
+    STORE_PERMISSIONS=777 \
+    TZ=UTC \
+    PORT=8080 \
+    DEBUG=true
 
 # Expose the application port
 EXPOSE 8080
 
-# Set the entrypoint script as the container entrypoint
-ENTRYPOINT ["/app/entrypoint.sh"]
-
-# Define the command to run
+# Run the binary directly - no entrypoint script needed in scratch
 CMD ["/app/whatsapp-bridge"]
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/api/status || exit 1
+# No health check - scratch doesn't have curl
