@@ -20,6 +20,12 @@ func main() {
 	}
 	defer whatsappClient.Stop()
 
+	// Start the WhatsApp client
+	if err := whatsappClient.Start(); err != nil {
+		log.Printf("Warning: Failed to start WhatsApp client: %v", err)
+		// Continue even if client fails to start, as QR code might need to be generated
+	}
+
 	apiConfig := &api.Config{
 		AllowedOrigins: cfg.AllowedOrigins,
 	}
@@ -31,7 +37,15 @@ func main() {
 	// Add other route handlers here...
 
 	log.Printf("Starting server on port %s with allowed origins: %v", cfg.ServerPort, cfg.AllowedOrigins)
-	if err := http.ListenAndServe(":"+cfg.ServerPort, nil); err != nil {
+
+	// Use DefaultServeMux for better logging
+	server := &http.Server{
+		Addr:    ":"+cfg.ServerPort,
+		Handler: http.DefaultServeMux,
+	}
+
+	log.Printf("Server is listening on port %s", cfg.ServerPort)
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
 }
